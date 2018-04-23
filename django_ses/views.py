@@ -184,6 +184,7 @@ def handle_bounce(request):
 
     try:
         notification = json.loads(raw_json.decode('utf-8'))
+        notification_type = notification.get('notificationType')
     except ValueError as e:
         # TODO: What kind of response should be returned here?
         logger.warning(u'Received bounce with bad JSON: "%s"', e)
@@ -195,14 +196,14 @@ def handle_bounce(request):
         # Don't send any info back when the notification is not
         # verified. Simply, don't process it.
         logger.info(u'Received unverified notification: Type: %s',
-            notification.get('Type'),
+            notification_type,
             extra={
                 'notification': notification,
             },
         )
         return HttpResponse()
 
-    if notification.get('Type') in ('SubscriptionConfirmation',
+    if notification_type in ('SubscriptionConfirmation',
                                     'UnsubscribeConfirmation'):
         # Process the (un)subscription confirmation.
 
@@ -225,9 +226,9 @@ def handle_bounce(request):
                 },
                 exc_info=True,
             )
-    elif notification.get('Type') == 'Notification':
+    elif notification_type in ('Bounce','Complaint','Delivery','Open','Click','Reject'):
         try:
-            message = json.loads(notification['Message'])
+            message = notification
         except ValueError as e:
             # The message isn't JSON.
             # Just ignore the notification.
@@ -236,7 +237,7 @@ def handle_bounce(request):
             })
         else:
             mail_obj = message.get('mail')
-            notification_type = message.get('notificationType')
+            #notification_type = message.get('notificationType')
 
             if notification_type == 'Bounce':
                 # Bounce
@@ -298,6 +299,57 @@ def handle_bounce(request):
                     sender=handle_bounce,
                     mail_obj=mail_obj,
                     delivery_obj=delivery_obj,
+                    raw_message=raw_json,
+                )
+            elif notification_type == 'Open':
+                #Open
+                open_obj = message.get('open',{})
+
+                # Logging
+                logger.info(u'Received open notification',
+                    extra={
+                        'notification': notification,
+                    },
+                )
+
+                signals.open_received.send(
+                    sender=handle_bounce,
+                    mail_obj=mail_obj,
+                    delivery_obj=open_obj,
+                    raw_message=raw_json,
+                )
+            elif notification_type == 'Click':
+                #Click
+                click_obj = message.get('click',{})
+
+                # Logging
+                logger.info(u'Received click notification',
+                    extra={
+                        'notification': notification,
+                    },
+                )
+
+                signals.click_received.send(
+                    sender=handle_bounce,
+                    mail_obj=mail_obj,
+                    delivery_obj=click_obj,
+                    raw_message=raw_json,
+                )
+            elif notification_type == 'Reject':
+                #Reject
+                reject_obj = message.get('reject',{})
+
+                # Logging
+                logger.info(u'Received reject notification',
+                    extra={
+                        'notification': notification,
+                    },
+                )
+
+                signals.reject_received.send(
+                    sender=handle_bounce,
+                    mail_obj=mail_obj,
+                    delivery_obj=reject_obj,
                     raw_message=raw_json,
                 )
             else:
